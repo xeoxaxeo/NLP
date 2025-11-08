@@ -16,11 +16,11 @@ build/
 *.ipr
 
 # Data
-data/
-*.pkl
+# data/
+# *.pkl
 
 # Index
-index/
+# index/
 
 # OS
 .DS_Store
