@@ -1,42 +1,70 @@
-# visualize.py: BIM vs BM25 비교 분석 시각화
+# visualize.py: BIM vs BM25 비교 분석 시각화 (로그 추가)
 
 import os
+import sys
 import json
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
+from datetime import datetime
 from pathlib import Path
 from collections import defaultdict
 
 SCRIPT_DIR = Path(__file__).parent
-PROJECT_ROOT = SCRIPT_DIR.parent
+PROJECT_ROOT = SCRIPT_DIR
 
 ANALYSIS_DIR = PROJECT_ROOT / 'analysis'
 RESULTS_DIR = PROJECT_ROOT / 'results'
+LOG_DIR = PROJECT_ROOT / 'logs'
 
 # 한글 폰트 설정
 plt.rcParams['font.family'] = 'Malgun Gothic'
 plt.rcParams['axes.unicode_minus'] = False
 
+# 로그 클래스
+class Logger:
+    def __init__(self, filename):
+        self.terminal = sys.stdout
+        self.log = open(filename, 'w', encoding='utf-8')
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+        self.log.flush()
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+    def close(self):
+        self.log.close()
+
 # 데이터 로드
 def load_data():
+    print("데이터 로드 시작\n")
+
     # 평가 결과
     with open(os.path.join(ANALYSIS_DIR, 'evaluation_results.json'), 'r', encoding='utf-8') as f:
         evaluation = json.load(f)
+    print("  evaluation_results.json 로드 완료")
 
     # 선정된 쿼리
     with open(os.path.join(ANALYSIS_DIR, 'selected_queries.json'), 'r', encoding='utf-8') as f:
         selected_queries = json.load(f)
+    print("  selected_queries.json 로드 완료")
 
     # 검색 결과
     with open(os.path.join(RESULTS_DIR, 'search_results.json'), 'r', encoding='utf-8') as f:
         search_results = json.load(f)
+    print("  search_results.json 로드 완료")
 
-    print("데이터 로드 완료\n")
+    print("\n데이터 로드 완료\n")
     return evaluation, selected_queries, search_results
 
 # BIM vs BM25 성능 비교 그래프
 def plot_performance_comparison(evaluation: dict):
+    print("1. 성능 비교 그래프 생성 시작")
+
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     fig.suptitle('BIM vs BM25 성능 비교', fontsize=16, fontweight='bold')
 
@@ -116,15 +144,17 @@ def plot_performance_comparison(evaluation: dict):
     plt.tight_layout()
     save_path = os.path.join(ANALYSIS_DIR, '1_performance_comparison.png')
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"저장: {save_path}")
+    print(f"   저장: {save_path}")
     plt.close()
 
 # TF 효과 분석 그래프
 def plot_tf_effect(selected_queries: dict, search_results: dict):
+    print("2. TF 효과 분석 그래프 생성 시작")
+
     tf_queries = selected_queries['tf_effect']
 
     if not tf_queries:
-        print("TF 효과 쿼리 없음")
+        print("   TF 효과 쿼리 없음 - 스킵")
         return
 
     # 쿼리별 점수 차이 분석
@@ -185,15 +215,17 @@ def plot_tf_effect(selected_queries: dict, search_results: dict):
     plt.tight_layout()
     save_path = os.path.join(ANALYSIS_DIR, '2_tf_effect_analysis.png')
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"저장: {save_path}")
+    print(f"   저장: {save_path}")
     plt.close()
 
 # 문서 길이 정규화 효과 분석 그래프
 def plot_length_effect(selected_queries: dict, search_results: dict):
+    print("3. 길이 정규화 효과 분석 그래프 생성 시작")
+
     length_queries = selected_queries['length_effect']
 
     if not length_queries:
-        print("길이 효과 쿼리 없음")
+        print("   길이 효과 쿼리 없음 - 스킵")
         return
 
     # 쿼리별 짧은 문서 vs 긴 문서 점수 비교
@@ -259,11 +291,13 @@ def plot_length_effect(selected_queries: dict, search_results: dict):
     plt.tight_layout()
     save_path = os.path.join(ANALYSIS_DIR, '3_length_effect_analysis.png')
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"저장: {save_path}")
+    print(f"   저장: {save_path}")
     plt.close()
 
 # 점수 분포 비교 그래프
 def plot_score_distribution(search_results: list):
+    print("4. 점수 분포 분석 그래프 생성 시작")
+
     all_bim_scores = []
     all_bm25_scores = []
     all_score_diffs = []
@@ -335,11 +369,13 @@ def plot_score_distribution(search_results: list):
     plt.tight_layout()
     save_path = os.path.join(ANALYSIS_DIR, '4_score_distribution.png')
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"저장: {save_path}")
+    print(f"   저장: {save_path}")
     plt.close()
 
 # 지표별 개선율 그래프
 def plot_metric_improvements(evaluation: dict):
+    print("5. 개선율 비교 그래프 생성 시작")
+
     bim_metrics = evaluation['BIM']
     bm25_metrics = evaluation['BM25']
 
@@ -381,38 +417,69 @@ def plot_metric_improvements(evaluation: dict):
     plt.tight_layout()
     save_path = os.path.join(ANALYSIS_DIR, '5_improvement_rates.png')
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"저장: {save_path}")
+    print(f"   저장: {save_path}")
     plt.close()
-
 
 # main
 def main():
+    # 로그 파일 설정
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = os.path.join(LOG_DIR, f'visualize_{timestamp}.log')
+    os.makedirs(LOG_DIR, exist_ok=True)
 
-    # 데이터 로드
-    evaluation, selected_queries, search_results = load_data()
+    logger = Logger(log_file)
+    sys.stdout = logger
 
-    # 성능 비교
-    plot_performance_comparison(evaluation)
+    try:
+        print("=" * 60)
+        print("BIM vs BM25 비교 분석 시각화")
+        print(f"실행 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("=" * 60 + "\n")
 
-    # TF 효과
-    plot_tf_effect(selected_queries, search_results)
+        # 데이터 로드
+        evaluation, selected_queries, search_results = load_data()
 
-    # 길이 효과
-    plot_length_effect(selected_queries, search_results)
+        # 그래프 생성
+        print("그래프 생성 시작\n")
 
-    # 점수 분포
-    plot_score_distribution(search_results)
+        # 1. 성능 비교
+        plot_performance_comparison(evaluation)
 
-    # 개선율
-    plot_metric_improvements(evaluation)
+        # 2. TF 효과
+        plot_tf_effect(selected_queries, search_results)
 
-    print("\n생성된 그래프:")
-    print("  1_performance_comparison.png: 전체 성능 비교")
-    print("  2_tf_effect_analysis.png: TF 효과 분석")
-    print("  3_length_effect_analysis.png: 길이 정규화 효과")
-    print("  4_score_distribution.png: 점수 분포 분석")
-    print("  5_improvement_rates.png: 개선율 비교\n")
+        # 3. 길이 효과
+        plot_length_effect(selected_queries, search_results)
 
+        # 4. 점수 분포
+        plot_score_distribution(search_results)
+
+        # 5. 개선율
+        plot_metric_improvements(evaluation)
+
+        print("\n" + "=" * 60)
+        print("생성된 그래프:")
+        print("=" * 60)
+        print("  1_performance_comparison.png: 전체 성능 비교")
+        print("  2_tf_effect_analysis.png: TF 효과 분석")
+        print("  3_length_effect_analysis.png: 길이 정규화 효과")
+        print("  4_score_distribution.png: 점수 분포 분석")
+        print("  5_improvement_rates.png: 개선율 비교")
+        print("=" * 60 + "\n")
+
+        print("시각화 완료")
+        print(f"로그 파일: {log_file}")
+        print("=" * 60 + "\n")
+
+    except Exception as e:
+        print(f"\n오류 발생: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+    finally:
+        sys.stdout = logger.terminal
+        logger.close()
+        print(f"\n로그 저장: {log_file}")
 
 if __name__ == "__main__":
     main()

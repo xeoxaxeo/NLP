@@ -1,4 +1,4 @@
-# build.py: Inverted Index 구축 및 SQLite 저장 (로그 추가)
+# build_multiprocsssing.py: Inverted Index 구축 (멀티프로세싱 ver.)
 
 import os
 import sys
@@ -6,11 +6,12 @@ import sqlite3
 import json
 import pickle
 from collections import defaultdict, Counter
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from datetime import datetime
 from tqdm import tqdm
 from kiwipiepy import Kiwi
 from pathlib import Path
+from multiprocessing import Pool, cpu_count
 
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR
@@ -19,6 +20,9 @@ DATA_DIR = PROJECT_ROOT / 'data'
 INDEX_DIR = PROJECT_ROOT / 'index'
 LOG_DIR = PROJECT_ROOT / 'logs'
 DB_PATH = INDEX_DIR / 'inverted_index.db'
+
+# 사용할 프로세스 수 (CPU 코어 수 - 1)
+NUM_PROCESSES = max(1, cpu_count() - 1)
 
 # 로그 클래스
 class Logger:
@@ -107,20 +111,34 @@ def initialize_database():
 
     return conn, cursor
 
+# 단일 문서 토큰화
+def tokenize_single_doc(doc):
+    kiwi = Kiwi()
+    doc_id = doc['_id']
+    title = doc['title']
+    text = doc['text']
+
+    full_text = f"{title} {text}"
+    tokens = tokenize(full_text, kiwi)
+
+    return doc_id, tokens
+
 # 문서 전처리 및 토큰화
-def tokenize_documents(corpus: List, kiwi: Kiwi):
+def tokenize_documents(corpus: List):
+    print(f"총 {len(corpus):,}개 문서 토큰화 시작 ({NUM_PROCESSES}개 프로세스 사용)")
+
     doc_tokens = {}
     doc_lengths = {}
 
-    print(f"총 {len(corpus):,}개 문서 토큰화 시작")
-    for doc in tqdm(corpus, desc="문서 토큰화"):
-        doc_id = doc['_id']
-        title = doc['title']
-        text = doc['text']
+    with Pool(processes=NUM_PROCESSES) as pool:
+        results = list(tqdm(
+            pool.imap(tokenize_single_doc, corpus),
+            total=len(corpus),
+            desc="문서 토큰화"
+        ))
 
-        full_text = f"{title} {text}"
-        tokens = tokenize(full_text, kiwi)
-
+    # 결과 정리
+    for doc_id, tokens in results:
         doc_tokens[doc_id] = tokens
         doc_lengths[doc_id] = len(tokens)
 
@@ -281,21 +299,17 @@ def main():
         print("=" * 60)
         print("Inverted Index 구축")
         print(f"실행 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"사용 프로세스: {NUM_PROCESSES}개")
         print("=" * 60 + "\n")
 
         # 데이터 로드
         corpus = load_data()
 
-        # Kiwi 초기화
-        print("Kiwi 형태소 분석기 초기화 시작")
-        kiwi = Kiwi()
-        print("초기화 완료\n")
-
         # DB 초기화
         conn, cursor = initialize_database()
 
         # 문서 토큰화
-        doc_tokens, doc_lengths = tokenize_documents(corpus, kiwi)
+        doc_tokens, doc_lengths = tokenize_documents(corpus)
 
         # Inverted Index 구축
         inverted_index = build_inverted_index(doc_tokens)

@@ -1,22 +1,25 @@
-# search.py: BIM/BM25 검색 엔진 구현
+# search.py: BIM/BM25 검색 엔진 구현 (로그 추가)
 
 import os
+import sys
 import sqlite3
 import json
 import pickle
 import math
-from typing import List, Dict, Tuple
+from typing import List, Dict
 from collections import defaultdict
+from datetime import datetime
 from tqdm import tqdm
 from kiwipiepy import Kiwi
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
-PROJECT_ROOT = SCRIPT_DIR.parent
+PROJECT_ROOT = SCRIPT_DIR
 
 DATA_DIR = PROJECT_ROOT / 'data'
 INDEX_DIR = PROJECT_ROOT / 'index'
 RESULTS_DIR = PROJECT_ROOT / 'results'
+LOG_DIR = PROJECT_ROOT / 'logs'
 DB_PATH = INDEX_DIR / 'inverted_index.db'
 
 # BM25 파라미터
@@ -25,6 +28,24 @@ B = 0.75
 
 # 결과 반환 개수
 TOP_K = 100
+
+# 로그 클래스
+class Logger:
+    def __init__(self, filename):
+        self.terminal = sys.stdout
+        self.log = open(filename, 'w', encoding='utf-8')
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+        self.log.flush()
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+    def close(self):
+        self.log.close()
 
 # 텍스트 토큰화
 def tokenize(text: str, kiwi_instance: Kiwi) -> List[str]:
@@ -104,45 +125,36 @@ def calculate_bim_score(query_tokens: List[str], cursor, N: int) -> Dict[str, fl
     scores = defaultdict(float)
 
     for term in query_tokens:
-        # Posting list 조회
         postings = get_term_postings(cursor, term)
 
         if not postings:
             continue
 
-        # IDF 계산
         df = len(postings)
         idf = calculate_idf(N, df)
 
-        # 해당 용어를 포함하는 모든 문서에 IDF 점수 부여
         for doc_id in postings.keys():
             scores[doc_id] += idf
 
     return scores
 
 # BM25 score 계산
-def calculate_bm25_score(query_tokens: List[str], cursor, N: int, avgdl: float) -> Dict[str, float]:
+def calculate_bm25_score(query_tokens: List[str], cursor, N: int, avgdl: float) -> tuple:
     scores = defaultdict(float)
-
-    # 각 문서별 term frequency 저장
     doc_term_freqs = defaultdict(lambda: defaultdict(int))
 
     for term in query_tokens:
-        # Posting list 조회
         postings = get_term_postings(cursor, term)
 
         if not postings:
             continue
 
-        # IDF 계산
         df = len(postings)
         idf = calculate_idf(N, df)
 
-        # 각 문서에 대해 BM25 점수 계산
         for doc_id, tf in postings.items():
             doc_term_freqs[doc_id][term] = tf
 
-            # 문서 길이 조회
             doc_length = get_document_length(cursor, doc_id)
 
             numerator = tf * (K1 + 1)
@@ -154,7 +166,6 @@ def calculate_bm25_score(query_tokens: List[str], cursor, N: int, avgdl: float) 
 
 # 단일 쿼리 검색
 def search_query(query_id: str, query_text: str, kiwi: Kiwi, cursor, N: int, avgdl: float) -> Dict:
-    # 쿼리 토큰화
     query_tokens = tokenize(query_text, kiwi)
 
     if not query_tokens:
@@ -185,10 +196,7 @@ def search_query(query_id: str, query_text: str, kiwi: Kiwi, cursor, N: int, avg
         bim_score = bim_scores.get(doc_id, 0.0)
         bm25_score = bm25_scores.get(doc_id, 0.0)
 
-        # 매칭된 용어 수 계산
         matched_terms = len([t for t in query_tokens if doc_id in get_term_postings(cursor, t)])
-
-        # 용어 빈도 정보
         term_frequencies = doc_term_freqs.get(doc_id, {})
 
         results.append({
@@ -222,6 +230,7 @@ def search_query(query_id: str, query_text: str, kiwi: Kiwi, cursor, N: int, avg
 def batch_search(queries: List, kiwi: Kiwi, cursor, N: int, avgdl: float) -> List[Dict]:
     all_results = []
 
+    print(f"총 {len(queries):,}개 쿼리 검색 시작\n")
     for query in tqdm(queries, desc="검색 수행"):
         query_id = query['_id']
         query_text = query['text']
@@ -229,6 +238,7 @@ def batch_search(queries: List, kiwi: Kiwi, cursor, N: int, avgdl: float) -> Lis
         result = search_query(query_id, query_text, kiwi, cursor, N, avgdl)
         all_results.append(result)
 
+    print(f"\n검색 완료: {len(all_results):,}개 쿼리 처리\n")
     return all_results
 
 # 검색 결과 저장
@@ -240,7 +250,7 @@ def save_results(results: List[Dict]):
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
 
-    print(f"\n검색 결과 저장 완료: {output_path}")
+    print(f"검색 결과 저장 완료: {output_path}")
     print(f"  총 {len(results):,}개 쿼리 처리\n")
 
 # 샘플 결과 출력
@@ -248,10 +258,13 @@ def show_sample_results(results: List[Dict]):
     if not results:
         return
 
-    print("\n[ 샘플 검색 결과 ]")
+    print("=" * 60)
+    print("샘플 검색 결과")
+    print("=" * 60 + "\n")
+
     sample = results[0]
 
-    print(f"\nQuery ID: {sample['query_id']}")
+    print(f"Query ID: {sample['query_id']}")
     print(f"Query: {sample['query_text']}")
     print(f"Tokens: {sample['query_tokens']}")
     print(f"검색 결과: {sample['num_results']}개\n")
@@ -265,37 +278,104 @@ def show_sample_results(results: List[Dict]):
         print(f"     차이: {result['score_difference']:.4f}")
         print(f"     매칭된 용어: {result['matched_terms']}개")
 
+    print()
+
+# 검색 통계 출력
+def print_search_statistics(results: List[Dict]):
+    print("=" * 60)
+    print("검색 통계")
+    print("=" * 60 + "\n")
+
+    total_queries = len(results)
+    total_results = sum(r['num_results'] for r in results)
+    avg_results = total_results / total_queries if total_queries > 0 else 0
+
+    all_score_diffs = []
+    for r in results:
+        for doc in r['results']:
+            all_score_diffs.append(doc['score_difference'])
+
+    print(f"총 쿼리 수: {total_queries:,}개")
+    print(f"총 검색 결과: {total_results:,}개")
+    print(f"쿼리당 평균 결과: {avg_results:.1f}개")
+
+    if all_score_diffs:
+        import numpy as np
+        print(f"\n점수 차이 (BM25 - BIM) 통계:")
+        print(f"  평균: {np.mean(all_score_diffs):.4f}")
+        print(f"  중앙값: {np.median(all_score_diffs):.4f}")
+        print(f"  최소: {np.min(all_score_diffs):.4f}")
+        print(f"  최대: {np.max(all_score_diffs):.4f}")
+
+    print()
+
 # main
 def main():
+    # 로그 파일 설정
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = os.path.join(LOG_DIR, f'search_{timestamp}.log')
+    os.makedirs(LOG_DIR, exist_ok=True)
 
-    # 데이터 로드
-    queries = load_queries()
+    logger = Logger(log_file)
+    sys.stdout = logger
 
-    # Kiwi 초기화
-    kiwi = Kiwi()
+    try:
+        print("=" * 60)
+        print("BIM/BM25 검색 수행")
+        print(f"실행 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("=" * 60 + "\n")
 
-    # DB 연결
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+        # 데이터 로드
+        queries = load_queries()
 
-    # 통계 정보 조회
-    N, avgdl = get_statistics(cursor)
-    print(f"통계 정보:")
-    print(f"  N (전체 문서 수): {N:,}개")
-    print(f"  avgdl (평균 문서 길이): {avgdl:.1f} 토큰\n")
+        # Kiwi 초기화
+        print("Kiwi 형태소 분석기 초기화 시작")
+        kiwi = Kiwi()
+        print("초기화 완료\n")
 
-    # 배치 검색 실행
-    results = batch_search(queries, kiwi, cursor, N, avgdl)
+        # DB 연결
+        print("데이터베이스 연결 시작")
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        print("연결 완료\n")
 
-    # 결과 저장
-    save_results(results)
+        # 통계 정보 조회
+        N, avgdl = get_statistics(cursor)
+        print(f"통계 정보:")
+        print(f"  N (전체 문서 수): {N:,}개")
+        print(f"  avgdl (평균 문서 길이): {avgdl:.1f} 토큰")
+        print(f"  BM25 파라미터: K1={K1}, B={B}")
+        print(f"  반환 결과 수: TOP {TOP_K}\n")
 
-    # 샘플 결과 출력
-    show_sample_results(results)
+        # 배치 검색 실행
+        results = batch_search(queries, kiwi, cursor, N, avgdl)
 
-    # 연결 종료
-    conn.close()
-    print("\n검색 완료")
+        # 결과 저장
+        save_results(results)
+
+        # 통계 출력
+        print_search_statistics(results)
+
+        # 샘플 결과 출력
+        show_sample_results(results)
+
+        # 연결 종료
+        conn.close()
+
+        print("=" * 60)
+        print("검색 완료")
+        print(f"로그 파일: {log_file}")
+        print("=" * 60 + "\n")
+
+    except Exception as e:
+        print(f"\n오류 발생: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+    finally:
+        sys.stdout = logger.terminal
+        logger.close()
+        print(f"\n로그 저장: {log_file}")
 
 if __name__ == "__main__":
     main()

@@ -1,35 +1,57 @@
-# evaluate.py: 검색 결과 평가 및 쿼리 선정
+# evaluate.py: 검색 결과 평가 및 쿼리 선정 (로그 추가)
 
 import os
+import sys
 import json
 import pickle
 import numpy as np
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Set
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
-PROJECT_ROOT = SCRIPT_DIR.parent
+PROJECT_ROOT = SCRIPT_DIR
 
 DATA_DIR = PROJECT_ROOT / 'data'
 RESULTS_DIR = PROJECT_ROOT / 'results'
 ANALYSIS_DIR = PROJECT_ROOT / 'analysis'
+LOG_DIR = PROJECT_ROOT / 'logs'
 
 # 평가 K 값들
 K_VALUES = [5, 10, 20, 50, 100]
+
+# 로그 클래스
+class Logger:
+    def __init__(self, filename):
+        self.terminal = sys.stdout
+        self.log = open(filename, 'w', encoding='utf-8')
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+        self.log.flush()
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+    def close(self):
+        self.log.close()
 
 # 데이터 로드
 def load_data():
     # 검색 결과
     with open(os.path.join(RESULTS_DIR, 'search_results.json'), 'r', encoding='utf-8') as f:
         search_results = json.load(f)
-    print(f"검색 결과 로드: {len(search_results):,}개 쿼리\n")
+    print(f"검색 결과 로드: {len(search_results):,}개 쿼리")
 
     # Qrels (정답 데이터)
     with open(os.path.join(DATA_DIR, 'qrels.pkl'), 'rb') as f:
         qrels = pickle.load(f)
-    print(f"Qrels 로드: {len(qrels):,}개\n")
+    print(f"Qrels 로드: {len(qrels):,}개")
 
+    print()
     return search_results, qrels
 
 # Qrels 딕셔너리 생성
@@ -137,11 +159,15 @@ def evaluate_all_queries(search_results: List[Dict], qrels_dict: Dict, model: st
 
     return avg_metrics
 
-# BIM vs BM25
+# BIM vs BM25 비교
 def compare_models(search_results: List[Dict], qrels_dict: Dict) -> Dict:
-
+    print("BIM 모델 평가 시작")
     bim_metrics = evaluate_all_queries(search_results, qrels_dict, model='bim')
+    print("완료\n")
+
+    print("BM25 모델 평가 시작")
     bm25_metrics = evaluate_all_queries(search_results, qrels_dict, model='bm25')
+    print("완료\n")
 
     comparison = {
         'BIM': bim_metrics,
@@ -152,6 +178,7 @@ def compare_models(search_results: List[Dict], qrels_dict: Dict) -> Dict:
 
 # 테스트 쿼리 선정
 def select_test_queries(search_results: List[Dict], qrels_dict: Dict) -> Dict[str, List[Dict]]:
+    print("테스트 쿼리 선정 시작\n")
 
     # 문서 길이 평균 계산
     all_doc_lengths = []
@@ -248,8 +275,11 @@ def save_evaluation_results(comparison: Dict, selected_queries: Dict):
         json.dump(selected_queries, f, ensure_ascii=False, indent=2)
     print(f"선정 쿼리 저장: {queries_path}\n")
 
-# 비교 결과
+# 비교 결과 출력
 def print_comparison_results(comparison: Dict):
+    print("=" * 60)
+    print("BIM vs BM25 성능 비교")
+    print("=" * 60 + "\n")
 
     bim_metrics = comparison['BIM']
     bm25_metrics = comparison['BM25']
@@ -294,8 +324,11 @@ def print_comparison_results(comparison: Dict):
     print(f"{'MAP':<15} {bim_map:<12.4f} {bm25_map:<12.4f} {diff:+.4f}")
     print()
 
-# 선정된 테스트 쿼리 샘플
+# 선정된 테스트 쿼리 샘플 출력
 def print_selected_queries_summary(selected_queries: Dict):
+    print("=" * 60)
+    print("선정된 테스트 쿼리 샘플")
+    print("=" * 60 + "\n")
 
     if selected_queries['tf_effect']:
         print("[ TF 효과 쿼리 ]")
@@ -327,32 +360,54 @@ def print_selected_queries_summary(selected_queries: Dict):
 
 # main
 def main():
-    print("=" * 60)
-    print("검색 결과 평가 및 쿼리 선정")
-    print("=" * 60 + "\n")
+    # 로그 파일 설정
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = os.path.join(LOG_DIR, f'evaluate_{timestamp}.log')
+    os.makedirs(LOG_DIR, exist_ok=True)
 
-    # 데이터 로드
-    search_results, qrels = load_data()
+    logger = Logger(log_file)
+    sys.stdout = logger
 
-    # Qrels 딕셔너리 생성
-    qrels_dict = build_qrels_dict(qrels)
-    print(f"Qrels 딕셔너리 생성: {len(qrels_dict):,}개 쿼리\n")
+    try:
+        print("=" * 60)
+        print("검색 결과 평가 및 쿼리 선정")
+        print(f"실행 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("=" * 60 + "\n")
 
-    # 모델 비교 평가
-    comparison = compare_models(search_results, qrels_dict)
+        # 데이터 로드
+        search_results, qrels = load_data()
 
-    # 테스트 쿼리 선정
-    selected_queries = select_test_queries(search_results, qrels_dict)
+        # Qrels 딕셔너리 생성
+        qrels_dict = build_qrels_dict(qrels)
+        print(f"Qrels 딕셔너리 생성: {len(qrels_dict):,}개 쿼리\n")
 
-    # 결과 저장
-    save_evaluation_results(comparison, selected_queries)
+        # 모델 비교 평가
+        comparison = compare_models(search_results, qrels_dict)
 
-    # 결과 출력
-    print_comparison_results(comparison)
-    print_selected_queries_summary(selected_queries)
+        # 테스트 쿼리 선정
+        selected_queries = select_test_queries(search_results, qrels_dict)
 
-    print("\n평가 완료")
+        # 결과 저장
+        save_evaluation_results(comparison, selected_queries)
 
+        # 결과 출력
+        print_comparison_results(comparison)
+        print_selected_queries_summary(selected_queries)
+
+        print("=" * 60)
+        print("평가 완료")
+        print(f"로그 파일: {log_file}")
+        print("=" * 60 + "\n")
+
+    except Exception as e:
+        print(f"\n오류 발생: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+    finally:
+        sys.stdout = logger.terminal
+        logger.close()
+        print(f"\n로그 저장: {log_file}")
 
 if __name__ == "__main__":
     main()
