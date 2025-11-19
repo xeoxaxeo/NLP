@@ -15,9 +15,13 @@ build/
 *.iws
 *.ipr
 
-# Data
-data/
+# 대용량
+# 대용량 데이터 파일 무시
 *.pkl
+*.db
+data/
+database/
+results/
 
 # Index
 index/
@@ -29,7 +33,6 @@ desktop.ini
 
 # Jupyter
 .ipynb_checkpoints/
-*.ipynb
 
 # 로그
 *.log
