@@ -18,6 +18,7 @@ build/
 # 대용량 데이터 파일 무시
 # *.pkl
 database/inverted_index.db
+database/inverted_index_backup.db
 # data/
 # database/
 # results/
