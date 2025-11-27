@@ -4,7 +4,7 @@
 
 2170045 서자영
 
-[📊 중간 보고서](https://github.com/xeoxaxeo/NLP/blob/main/reports/Intermediate_Report.ipynb)
+## [📊 중간 보고서](https://github.com/xeoxaxeo/NLP/blob/main/reports/Intermediate_Report.ipynb)
 
 -----
 
