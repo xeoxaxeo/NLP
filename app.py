@@ -13,7 +13,7 @@ from pathlib import Path
 st.set_page_config(layout="wide", page_title="한국어 검색 엔진")
 
 # 경로 설정
-DB_PATH = Path('database/inverted_index_backup.db')
+DB_PATH = Path('database/inverted_index.db')
 
 # Kiwi 초기화
 @st.cache_resource
