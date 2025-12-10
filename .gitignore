@@ -23,6 +23,11 @@ database/*
 # database/
 # results/
 
+data_final/*
+database_final/*
+final_data/*
+final_database/*
+
 # Index
 index/
 

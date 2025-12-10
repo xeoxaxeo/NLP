@@ -17,3 +17,5 @@ seaborn>=0.12.0
 
 # 기타
 scikit-learn>=1.3.0
+
+# pip install kiwipiepy datasets tqdm pandas numpy matplotlib seaborn scikit-learn
