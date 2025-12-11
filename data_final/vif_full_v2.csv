@@ -1,0 +1,9 @@
+Feature,VIF
+query_unique_ratio,56.12362967262594
+query_length,28.299857173300673
+query_avg_token_len,28.275001325930234
+query_match_count,24.817167878012192
+query_match_ratio,17.497112624663817
+dominant_prob,12.335672523150398
+dominant_topic,3.1124335975700865
+doc_length,2.5311319010983464
