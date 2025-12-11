@@ -23,8 +23,8 @@ database/*
 # database/
 # results/
 
-data_final/*
-database_final/*
+data_final/*.pkl
+database_final/*.db
 final_data/*
 final_database/*
 final_notebooks/*
