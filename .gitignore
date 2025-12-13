@@ -27,11 +27,6 @@ data_final/*.pkl
 database_final/*.db
 final_data/*
 final_database/*
-final_notebooks/*
-!1_Preprocessing.ipynb
-!2_Retrieval_and_Metrics.ipynb
-!3_Regression_and_Visualization.ipynb
-!4_Advanced_Analysis.ipynb
 
 # Index
 index/
